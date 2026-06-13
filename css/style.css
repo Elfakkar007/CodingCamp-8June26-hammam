@@ -1,0 +1,382 @@
+/* ─── DESIGN TOKENS ──────────────────────────────────────────────── */
+:root {
+  /* Color palette */
+  --color-bg:           #000000;
+  --color-surface:      #111111;
+  --color-border:       #2a2a2a;
+  --color-text-primary: #ffffff;
+  --color-text-muted:   #7e7e7e;
+  --color-m-blue:       #0066b1;
+  --color-m-darkblue:   #1c69d4;
+  --color-m-red:        #e22718;
+  --color-negative:     #e22718;
+
+  /* Typography */
+  --font-family:        'BMW Type Next Latin', Inter, system-ui, sans-serif;
+  --font-weight-bold:   700;
+  --font-weight-light:  300;
+  --letter-spacing-ui:  0.1em;
+
+  /* Spacing scale */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 40px;
+
+  /* Borders — zero radius everywhere */
+  --border-radius: 0;
+  --border-width:  1px;
+}
+
+/* ─── BASE RESET ─────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background:   var(--color-bg);
+  color:        var(--color-text-primary);
+  font-family:  var(--font-family);
+  font-weight:  var(--font-weight-light);
+}
+
+/* ─── HEADER ─────────────────────────────────────────────────────── */
+header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--color-bg);
+  padding: var(--space-lg);
+  border-bottom: var(--border-width) solid var(--color-border);
+}
+
+.m-tricolor {
+  display: flex;
+  width: 100%;
+}
+
+.bar {
+  height: 4px;
+  flex: 1;
+  border-radius: 0;
+}
+
+.bar--blue     { background: #0066b1; }
+.bar--darkblue { background: #1c69d4; }
+.bar--red      { background: #e22718; }
+
+header h1 {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: var(--space-md) var(--space-lg);
+  font-size: 1.25rem;
+}
+
+/* ─── LAYOUT ─────────────────────────────────────────────────────── */
+main {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: var(--space-lg);
+}
+
+/* ─── SECTIONS ───────────────────────────────────────────────────── */
+section {
+  background:    var(--color-surface);
+  border:        1px solid var(--color-border);
+  padding:       var(--space-lg);
+  margin-bottom: var(--space-md);
+}
+
+section h2 {
+  font-weight:     var(--font-weight-bold);
+  text-transform:  uppercase;
+  letter-spacing:  var(--letter-spacing-ui);
+  margin-bottom:   var(--space-md);
+  font-size:       0.875rem;
+}
+
+/* ─── RESPONSIVE ─────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  main {
+    padding: var(--space-md);
+  }
+}
+
+/* ─── FORM INPUTS ────────────────────────────────────────────────── */
+input {
+  border-radius:  0;
+  border:         1px solid var(--color-border);
+  background:     var(--color-bg);
+  color:          var(--color-text-primary);
+  width:          100%;
+  padding:        var(--space-sm) var(--space-md);
+  font-family:    inherit;
+  font-size:      1rem;
+  margin-bottom:  var(--space-sm);
+  display:        block;
+}
+
+/* ─── FORM LABELS ────────────────────────────────────────────────── */
+label {
+  display:         block;
+  font-size:       0.75rem;
+  text-transform:  uppercase;
+  letter-spacing:  var(--letter-spacing-ui);
+  margin-bottom:   var(--space-xs);
+  color:           var(--color-text-muted);
+}
+
+/* ─── FIELD ERROR SPANS ──────────────────────────────────────────── */
+.field-error {
+  color:         var(--color-m-red);
+  font-size:     0.85rem;
+  display:       block;
+  min-height:    1.2em;
+  margin-bottom: var(--space-xs);
+}
+
+/* ─── BUTTONS ────────────────────────────────────────────────────── */
+button {
+  border-radius:   0;
+  border:          1px solid var(--color-border);
+  background:      var(--color-bg);
+  color:           var(--color-text-primary);
+  cursor:          pointer;
+  font-family:     inherit;
+  font-size:       0.875rem;
+  text-transform:  uppercase;
+  letter-spacing:  var(--letter-spacing-ui);
+  padding:         var(--space-sm) var(--space-md);
+}
+
+/* ─── SUBMIT BUTTONS ─────────────────────────────────────────────── */
+.submit-btn,
+#balance-form button[type="submit"],
+#expense-form button[type="submit"] {
+  background:    var(--color-m-blue);
+  color:         #fff;
+  font-weight:   var(--font-weight-bold);
+  border-color:  var(--color-m-blue);
+  width:         100%;
+  padding:       var(--space-sm) var(--space-md);
+  margin-top:    var(--space-sm);
+}
+
+.submit-btn:hover,
+#balance-form button[type="submit"]:hover,
+#expense-form button[type="submit"]:hover {
+  background:   var(--color-m-darkblue);
+  border-color: var(--color-m-darkblue);
+}
+
+/* ─── FOCUS INDICATOR ────────────────────────────────────────────── */
+:focus-visible {
+  outline:        2px solid var(--color-m-darkblue);
+  outline-offset: 2px;
+}
+
+/* ─── CATEGORY TABS ──────────────────────────────────────────────── */
+#category-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-md);
+  margin-top: var(--space-xs);
+}
+
+.category-tab {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-ui);
+  font-weight: var(--font-weight-light);
+  border-radius: 0;
+  padding: var(--space-sm) var(--space-md);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.8rem;
+  margin: 2px;
+}
+
+.category-tab.category-tab--active,
+.category-tab--active {
+  background: var(--color-m-blue);
+  color: #fff;
+  border-color: var(--color-m-blue);
+}
+
+.category-tab:hover:not(.category-tab--active) {
+  border-color: var(--color-m-blue);
+  color: var(--color-m-blue);
+}
+
+/* ─── EXPENSE LIST ───────────────────────────────────────────────── */
+#expense-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+#expense-list li {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+#expense-list li:last-child {
+  border-bottom: none;
+}
+
+/* ─── EXPENSE ROW ELEMENTS ───────────────────────────────────────── */
+.expense-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.expense-amount {
+  white-space: nowrap;
+  font-weight: var(--font-weight-bold);
+}
+
+/* ─── CATEGORY BADGE ─────────────────────────────────────────────── */
+.category-badge {
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  color: #fff;
+  border-radius: 0;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-ui);
+  white-space: nowrap;
+}
+
+/* ─── DELETE BUTTON ──────────────────────────────────────────────── */
+.delete-btn {
+  background: transparent;
+  color: var(--color-text-muted);
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: var(--space-xs);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.delete-btn:hover {
+  color: var(--color-m-red);
+}
+
+/* ─── EMPTY STATE ────────────────────────────────────────────────── */
+.empty-state {
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-light);
+  text-align: center;
+  padding: var(--space-xl);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-ui);
+  font-size: 0.875rem;
+  list-style: none;
+}
+
+/* ─── STORAGE BANNER ─────────────────────────────────────────────── */
+#storage-banner {
+  background:      var(--color-m-red);
+  color:           #fff;
+  padding:         var(--space-sm) var(--space-md);
+  width:           100%;
+  text-transform:  uppercase;
+  letter-spacing:  var(--letter-spacing-ui);
+  font-size:       0.875rem;
+  display:         flex;
+  justify-content: space-between;
+  align-items:     center;
+}
+
+#storage-banner[hidden] {
+  display: none;
+}
+
+#dismiss-banner {
+  background:     transparent;
+  color:          #fff;
+  border:         none;
+  cursor:         pointer;
+  font-size:      1.2rem;
+  padding:        0 var(--space-xs);
+  line-height:    1;
+  letter-spacing: normal;
+}
+
+/* ─── BALANCE DISPLAY ────────────────────────────────────────────── */
+#balance-display {
+  font-size:     2rem;
+  font-weight:   var(--font-weight-bold);
+  margin-bottom: var(--space-md);
+}
+
+.balance--negative {
+  color: var(--color-negative);
+}
+
+/* ─── CHART SECTION ──────────────────────────────────────────────── */
+#expense-chart {
+  width:     100%;
+  max-width: 300px;
+  height:    auto;
+  display:   block;
+  margin:    0 auto;
+}
+
+#chart-legend {
+  list-style: none;
+  padding:    0;
+  flex:       1;
+}
+
+#chart-legend li {
+  display:     flex;
+  align-items: center;
+  gap:         var(--space-sm);
+  padding:     var(--space-xs) 0;
+  font-size:   0.875rem;
+}
+
+.legend-swatch {
+  width:         12px;
+  height:        12px;
+  border-radius: 0;
+  flex-shrink:   0;
+}
+
+.legend-label {
+  flex: 1;
+}
+
+.legend-amount {
+  font-weight: var(--font-weight-bold);
+}
+
+/* Chart + legend: side-by-side at >= 480px, stacked below */
+@media (min-width: 480px) {
+  #chart-section {
+    display:     flex;
+    flex-wrap:   wrap;
+    gap:         var(--space-lg);
+    align-items: flex-start;
+  }
+
+  #chart-section h2 {
+    width: 100%; /* heading always spans full row */
+  }
+}
