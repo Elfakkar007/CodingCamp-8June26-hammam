@@ -8,80 +8,244 @@
 </head>
 <body>
 
-  <!-- Storage warning banner (hidden by default) -->
-  <div id="storage-banner" class="storage-banner" role="alert" hidden>
+  <!-- Storage Warning -->
+  <div id="storage-banner" role="alert" hidden>
     LOCAL STORAGE UNAVAILABLE — DATA WILL NOT BE SAVED
-    <button id="dismiss-banner" aria-label="Dismiss warning">✕</button>
+    <button id="dismiss-banner" aria-label="Dismiss">✕</button>
   </div>
 
   <!-- Header -->
-  <header id="app-header">
+  <header>
     <div class="m-tricolor" aria-hidden="true">
       <span class="bar bar--blue"></span>
       <span class="bar bar--darkblue"></span>
       <span class="bar bar--red"></span>
     </div>
-    <h1>EXPENSE TRACKER</h1>
+    <div class="header-inner">
+      <h1>M Expense Tracker</h1>
+      <div class="header-right">
+        <button id="theme-toggle" aria-label="Toggle theme">
+          <svg id="theme-icon-sun" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="display:none">
+            <path d="M12 4a1 1 0 0 1 1 1v1a1 1 0 0 1-2 0V5a1 1 0 0 1 1-1zm0 13a1 1 0 0 1 1 1v1a1 1 0 0 1-2 0v-1a1 1 0 0 1 1-1zm9-5a1 1 0 0 1-1 1h-1a1 1 0 0 1 0-2h1a1 1 0 0 1 1 1zM4 12a1 1 0 0 1-1 1H2a1 1 0 0 1 0-2h1a1 1 0 0 1 1 1zm14.95-6.364a1 1 0 0 1 0 1.414l-.707.707a1 1 0 1 1-1.414-1.414l.707-.707a1 1 0 0 1 1.414 0zM7.172 16.828a1 1 0 0 1 0 1.414l-.707.707a1 1 0 1 1-1.414-1.414l.707-.707a1 1 0 0 1 1.414 0zM18.95 18.95a1 1 0 0 1-1.414 0l-.707-.707a1 1 0 0 1 1.414-1.414l.707.707a1 1 0 0 1 0 1.414zM7.172 7.172a1 1 0 0 1-1.414 0L5.05 6.464A1 1 0 0 1 6.464 5.05l.708.707a1 1 0 0 1 0 1.415zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/>
+          </svg>
+          <svg id="theme-icon-moon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/>
+          </svg>
+          <span id="theme-label">LIGHT</span>
+        </button>
+      </div>
+    </div>
   </header>
 
   <main>
 
-    <!-- Balance Section -->
-    <section id="balance-section" aria-labelledby="balance-heading">
-      <h2 id="balance-heading">BALANCE</h2>
-      <p id="balance-display" aria-live="polite">Rp 0</p>
-      <form id="balance-form" novalidate>
-        <label for="balance-input">SET BALANCE</label>
-        <input id="balance-input" type="number" min="1" max="999999999"
-               autocomplete="off" inputmode="numeric" />
-        <span id="balance-error" class="field-error" role="alert" aria-live="assertive"></span>
-        <button type="submit">SET BALANCE</button>
-      </form>
-    </section>
+    <!-- VIEW NAV -->
+    <nav class="view-nav" role="tablist">
+      <button class="view-tab active" role="tab" data-view="dashboard">DASHBOARD</button>
+      <button class="view-tab" role="tab" data-view="history">HISTORY</button>
+      <button class="view-tab" role="tab" data-view="monthly">MONTHLY</button>
+      <button class="view-tab" role="tab" data-view="settings">SETTINGS</button>
+    </nav>
 
-    <!-- Expense Form Section -->
-    <section id="form-section" aria-labelledby="form-heading">
-      <h2 id="form-heading">ADD EXPENSE</h2>
-      <form id="expense-form" novalidate>
+    <!-- ═══════════════════ VIEW: DASHBOARD ═══════════════════════ -->
+    <div id="view-dashboard">
 
-        <label for="expense-name">ITEM NAME</label>
-        <input id="expense-name" type="text" maxlength="250" autocomplete="off" />
-        <span id="name-error" class="field-error" role="alert" aria-live="assertive"></span>
-
-        <label for="expense-amount">AMOUNT</label>
-        <input id="expense-amount" type="number" min="0.01" step="0.01"
-               autocomplete="off" inputmode="decimal" />
-        <span id="amount-error" class="field-error" role="alert" aria-live="assertive"></span>
-
-        <label id="category-label">CATEGORY</label>
-        <div id="category-tabs" role="group" aria-labelledby="category-label">
-          <!-- Rendered by JS: one <button type="button"> per category -->
+      <!-- Balance Card -->
+      <div class="card">
+        <p class="card-title">Balance</p>
+        <div class="balance-row">
+          <p id="balance-display">Rp 0</p>
+          <span id="balance-meta"></span>
         </div>
-        <input type="hidden" id="expense-category" value="Food" />
+        <div id="limit-bar-wrap" hidden>
+          <div id="limit-label">
+            <span>Spend limit</span>
+            <span id="limit-pct-label">0%</span>
+          </div>
+          <div id="limit-bar-bg"><div id="limit-bar-fill" style="width:0%"></div></div>
+        </div>
+        <form id="balance-form" novalidate style="margin-top:20px">
+          <div class="form-inline">
+            <input id="balance-input" type="number" min="1" max="999999999"
+                   autocomplete="off" inputmode="numeric" placeholder="Set new balance" />
+            <button type="submit" class="btn btn--primary">Set</button>
+          </div>
+          <p id="balance-error" class="field-error" role="alert" aria-live="assertive"></p>
+        </form>
+      </div>
 
-        <button type="submit">ADD EXPENSE</button>
-      </form>
-    </section>
+      <!-- Add Expense Card -->
+      <div class="card">
+        <p class="card-title">Add Expense</p>
+        <form id="expense-form" novalidate>
+          <div class="form-row">
+            <label class="field-label" for="expense-name">Item Name</label>
+            <input id="expense-name" type="text" maxlength="250" autocomplete="off"
+                   placeholder="e.g. Track day entrance fee" />
+            <p id="name-error" class="field-error" role="alert" aria-live="assertive"></p>
+          </div>
+          <div class="form-row">
+            <label class="field-label" for="expense-amount">Amount (Rp)</label>
+            <input id="expense-amount" type="number" min="0.01" step="0.01"
+                   autocomplete="off" inputmode="decimal" placeholder="0" />
+            <p id="amount-error" class="field-error" role="alert" aria-live="assertive"></p>
+          </div>
+          <div class="form-row">
+            <label class="field-label" id="cat-group-label">Category</label>
+            <div id="category-tabs" role="group" aria-labelledby="cat-group-label">
+              <!-- rendered by JS -->
+            </div>
+            <input type="hidden" id="expense-category" value="" />
+          </div>
+          <button type="submit" class="btn btn--primary btn--full" style="margin-top:8px">Add Expense</button>
+        </form>
+      </div>
 
-    <!-- Expense List Section -->
-    <section id="list-section" aria-labelledby="list-heading">
-      <h2 id="list-heading">EXPENSE HISTORY</h2>
-      <ul id="expense-list" aria-label="Expense history">
-        <!-- Rendered by JS -->
-      </ul>
-    </section>
+      <!-- Chart Card -->
+      <div class="card">
+        <p class="card-title">Spend Breakdown</p>
+        <div class="chart-wrap">
+          <canvas id="expense-chart" width="200" height="200"
+                  aria-label="Expense breakdown by category"></canvas>
+          <ul id="chart-legend"></ul>
+        </div>
+      </div>
 
-    <!-- Chart Section -->
-    <section id="chart-section" aria-labelledby="chart-heading">
-      <h2 id="chart-heading">SPEND BREAKDOWN</h2>
-      <canvas id="expense-chart" width="300" height="300"
-              aria-label="Expense breakdown by category"></canvas>
-      <ul id="chart-legend" aria-label="Chart legend">
-        <!-- Rendered by JS -->
-      </ul>
-    </section>
+    </div>
+
+    <!-- ═══════════════════ VIEW: HISTORY ═════════════════════════ -->
+    <div id="view-history" hidden>
+      <div class="card">
+        <p class="card-title">Expense History</p>
+
+        <!-- Sort bar -->
+        <div class="sort-bar">
+          <span class="sort-label">Sort:</span>
+          <button class="sort-btn" data-sort="date">Date</button>
+          <button class="sort-btn active" data-sort="amount">Amount</button>
+          <button class="sort-btn" data-sort="category">Category</button>
+        </div>
+
+        <!-- Scrollable table -->
+        <div class="expense-scroll-wrap">
+          <table class="expense-table" aria-label="Expense history">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Category</th>
+                <th>Date</th>
+                <th style="text-align:right">Amount</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="expense-tbody">
+              <!-- rendered by JS -->
+            </tbody>
+          </table>
+        </div>
+        <div id="history-empty" class="empty-state" hidden>No expenses recorded yet</div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════ VIEW: MONTHLY ═════════════════════════ -->
+    <div id="view-monthly" hidden>
+      <div class="card">
+        <div class="monthly-nav">
+          <div class="monthly-nav-btns">
+            <button class="btn btn--sm" id="month-prev">← PREV</button>
+          </div>
+          <h2 id="month-title">—</h2>
+          <div class="monthly-nav-btns">
+            <button class="btn btn--sm" id="month-next">NEXT →</button>
+          </div>
+        </div>
+
+        <div class="monthly-stats" id="monthly-stats">
+          <div class="stat-cell">
+            <div class="stat-val" id="mstat-total">Rp 0</div>
+            <div class="stat-lbl">Total Spent</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-val" id="mstat-count">0</div>
+            <div class="stat-lbl">Transactions</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-val" id="mstat-avg">Rp 0</div>
+            <div class="stat-lbl">Avg per Item</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-val" id="mstat-top">—</div>
+            <div class="stat-lbl">Top Category</div>
+          </div>
+        </div>
+
+        <p class="card-title">By Category</p>
+        <ul class="monthly-cat-list" id="monthly-cat-list">
+          <!-- rendered by JS -->
+        </ul>
+        <div id="monthly-empty" class="empty-state" hidden>No expenses this month</div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════ VIEW: SETTINGS ════════════════════════ -->
+    <div id="view-settings" hidden>
+
+      <div class="card">
+        <p class="card-title">Spend Limit</p>
+        <p style="font-size:13px;color:var(--body);margin-bottom:16px;font-weight:300">
+          Set a per-transaction warning threshold. Expenses above this amount will be highlighted in red.
+        </p>
+        <div class="settings-row">
+          <input id="limit-input" type="number" min="0" step="1000" placeholder="e.g. 500000" />
+          <button class="btn btn--primary" id="save-limit-btn">Save</button>
+          <button class="btn" id="clear-limit-btn">Clear</button>
+        </div>
+        <p id="limit-status" style="font-size:12px;color:var(--muted);margin-top:10px;letter-spacing:0.5px;font-weight:300"></p>
+      </div>
+
+      <div class="card">
+        <p class="card-title">Custom Categories</p>
+        <div class="custom-cats-list" id="custom-cats-list">
+          <!-- rendered by JS -->
+        </div>
+        <div class="add-cat-row">
+          <input id="new-cat-name" type="text" maxlength="30" placeholder="Category name" />
+          <div class="color-pick-wrap">
+            <input type="color" id="new-cat-color" value="#7e7e7e" />
+            <span>Color</span>
+          </div>
+          <button class="btn btn--primary btn--sm" id="add-cat-btn">Add</button>
+        </div>
+        <p id="cat-error" class="field-error"></p>
+      </div>
+
+    </div>
 
   </main>
+
+  <!-- ─── MODAL: Custom Category (pop-up from Add Expense) ──────── -->
+  <div id="modal-cat" class="modal-overlay" role="dialog" aria-modal="true"
+       aria-labelledby="modal-cat-title" hidden>
+    <div class="modal">
+      <p class="modal-title" id="modal-cat-title">New Category</p>
+      <div class="form-row">
+        <label class="field-label" for="modal-cat-name">Category Name</label>
+        <input id="modal-cat-name" type="text" maxlength="30" placeholder="e.g. Motorsport" />
+        <p id="modal-cat-error" class="field-error"></p>
+      </div>
+      <div class="form-row">
+        <label class="field-label">Color</label>
+        <div class="color-pick-wrap" style="width:fit-content">
+          <input type="color" id="modal-cat-color" value="#0066b1" />
+          <span>Pick color</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" id="modal-cat-cancel">Cancel</button>
+        <button class="btn btn--primary" id="modal-cat-save">Save Category</button>
+      </div>
+    </div>
+  </div>
 
   <script src="js/script.js"></script>
 </body>

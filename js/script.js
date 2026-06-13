@@ -1,597 +1,658 @@
 (function () {
+  'use strict';
 
-  // ─── 1. CONSTANTS ──────────────────────────────────────────────
+  /* ─── CONSTANTS ────────────────────────────────────────────── */
+  const LS_BALANCE  = 'em_balance';
+  const LS_EXPENSES = 'em_expenses';
+  const LS_CATS     = 'em_categories';
+  const LS_LIMIT    = 'em_limit';
+  const LS_THEME    = 'em_theme';
 
-  const LS_KEY_BALANCE  = 'expenseTracker_balance';
-  const LS_KEY_EXPENSES = 'expenseTracker_expenses';
-  const DEFAULT_LOCALE  = 'id-ID';
-  const DEFAULT_CURRENCY = 'IDR';
-  const MAX_BALANCE     = 999_999_999;
-  const MAX_AMOUNT      = 999_999_999.99;
-  const MAX_NAME_LEN    = 250;
-  const LIST_TRUNCATE   = 40;
+  const MAX_BALANCE = 999_999_999;
+  const MAX_AMOUNT  = 999_999_999.99;
+  const MAX_NAME    = 250;
+  const LOCALE      = 'id-ID';
+  const CURRENCY    = 'IDR';
 
-  const CATEGORIES = {
-    Food:          { color: '#0066b1' },
-    Transport:     { color: '#1c69d4' },
-    Entertainment: { color: '#e22718' },
-    Shopping:      { color: '#f4b400' },
-    Health:        { color: '#0fa336' },
-    Other:         { color: '#7e7e7e' },
+  /* ─── DEFAULT CATEGORIES ───────────────────────────────────── */
+  const DEFAULT_CATS = {
+    Food:          '#0066b1',
+    Transport:     '#1c69d4',
+    Entertainment: '#e22718',
+    Shopping:      '#f4b400',
+    Health:        '#0fa336',
+    Other:         '#7e7e7e',
   };
 
-  // ─── 2. STATE ──────────────────────────────────────────────────
-
+  /* ─── STATE ────────────────────────────────────────────────── */
   let state = {
-    balance:  0,
-    expenses: [],
+    balance:    0,
+    expenses:   [],
+    categories: { ...DEFAULT_CATS },  // name → hex
+    limit:      0,                    // 0 = no limit
   };
 
-  let storageAvailable = true;
-  let canvasCtx = null;
-  let bannerShown = false;
+  let storageOk  = true;
+  let canvasCtx  = null;
+  let activeView = 'dashboard';
+  let sortField  = 'amount';
+  let sortDir    = 'desc';
+  let monthCursor = new Date(); // used for monthly view
+  let selectedCategory = '';
 
-  // ─── 3. LOCALSTORAGE HELPERS ───────────────────────────────────
-
-  /**
-   * Test localStorage availability once at startup.
-   * @returns {boolean}
-   */
-  function checkStorageAvailable() {
+  /* ─── STORAGE ──────────────────────────────────────────────── */
+  function checkStorage() {
     try {
-      const testKey = '__ls_test__';
-      localStorage.setItem(testKey, '1');
-      localStorage.removeItem(testKey);
+      localStorage.setItem('__t__','1');
+      localStorage.removeItem('__t__');
       return true;
-    } catch {
-      return false;
-    }
+    } catch { return false; }
   }
 
-  /**
-   * Persist current state to localStorage.
-   * No-op if storageAvailable === false.
-   */
-  function persistState() {
-    if (!storageAvailable) return;
-    localStorage.setItem(LS_KEY_BALANCE, String(state.balance));
-    localStorage.setItem(LS_KEY_EXPENSES, JSON.stringify(state.expenses));
+  function persist() {
+    if (!storageOk) return;
+    localStorage.setItem(LS_BALANCE,  String(state.balance));
+    localStorage.setItem(LS_EXPENSES, JSON.stringify(state.expenses));
+    localStorage.setItem(LS_CATS,     JSON.stringify(state.categories));
+    localStorage.setItem(LS_LIMIT,    String(state.limit));
   }
 
-  /**
-   * Load balance and expenses from localStorage into state.
-   * Handles missing keys and JSON parse failures gracefully.
-   */
-  function loadState() {
-    // Load balance — default 0 on missing, NaN, or invalid
-    const rawBalance = localStorage.getItem(LS_KEY_BALANCE);
-    const parsedBalance = parseFloat(rawBalance);
-    state.balance = (rawBalance !== null && !isNaN(parsedBalance)) ? parsedBalance : 0;
+  function load() {
+    const rb = localStorage.getItem(LS_BALANCE);
+    state.balance = rb !== null && !isNaN(+rb) ? +rb : 0;
 
-    // Load expenses — default [] on missing, JSON parse failure, or non-array
     try {
-      const rawExpenses = localStorage.getItem(LS_KEY_EXPENSES);
-      const parsed = rawExpenses ? JSON.parse(rawExpenses) : [];
-      if (!Array.isArray(parsed)) throw new Error('Not an array');
-      state.expenses = parsed;
-    } catch {
-      state.expenses = [];
-      showStorageBanner();
-    }
+      const re = localStorage.getItem(LS_EXPENSES);
+      const p  = re ? JSON.parse(re) : [];
+      state.expenses = Array.isArray(p) ? p : [];
+    } catch { state.expenses = []; }
+
+    try {
+      const rc = localStorage.getItem(LS_CATS);
+      const p  = rc ? JSON.parse(rc) : null;
+      state.categories = (p && typeof p === 'object') ? { ...DEFAULT_CATS, ...p } : { ...DEFAULT_CATS };
+    } catch { state.categories = { ...DEFAULT_CATS }; }
+
+    const rl = localStorage.getItem(LS_LIMIT);
+    state.limit = rl !== null && !isNaN(+rl) ? +rl : 0;
   }
 
-  // ─── 4. FORMATTING HELPERS ─────────────────────────────────────
-
-  /**
-   * Format a number as a locale currency string.
-   * Uses Indonesian Rupiah (IDR) formatting by default.
-   * @param {number} value
-   * @returns {string}  e.g. "Rp 500.000"
-   */
-  function formatCurrency(value) {
-    return new Intl.NumberFormat(DEFAULT_LOCALE, {
-      style:                 'currency',
-      currency:              DEFAULT_CURRENCY,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(value);
+  /* ─── FORMAT ───────────────────────────────────────────────── */
+  function fmt(v) {
+    return new Intl.NumberFormat(LOCALE, {
+      style: 'currency', currency: CURRENCY,
+      minimumFractionDigits: 0, maximumFractionDigits: 0,
+    }).format(v);
   }
 
-  /**
-   * Truncate a string to maxLen characters, appending '…' if truncated.
-   * @param {string} str
-   * @param {number} maxLen
-   * @returns {string}
-   */
-  function truncate(str, maxLen) {
-    return str.length > maxLen ? str.slice(0, maxLen) + '…' : str;
+  function fmtDate(ts) {
+    return new Date(ts).toLocaleDateString(LOCALE, {
+      day: '2-digit', month: 'short', year: 'numeric'
+    });
   }
 
-  /**
-   * Generate a unique ID.
-   * Uses crypto.randomUUID() when available, otherwise falls back to
-   * a timestamp + random string combination.
-   * @returns {string}
-   */
-  function generateId() {
-    return (typeof crypto !== 'undefined' && crypto.randomUUID)
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  function truncate(s, n) {
+    return s.length > n ? s.slice(0, n) + '…' : s;
   }
 
-  // ─── 5. VALIDATION ─────────────────────────────────────────────
+  function uid() {
+    return crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
 
-  /**
-   * Validate balance input.
-   * @param {string} raw - Raw string from input element
-   * @returns {{ valid: boolean, value?: number, error?: string }}
-   */
+  /* ─── THEME ────────────────────────────────────────────────── */
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.getElementById('theme-label').textContent = theme === 'dark' ? 'LIGHT' : 'DARK';
+    document.getElementById('theme-icon-sun').style.display  = theme === 'dark' ? 'none'  : '';
+    document.getElementById('theme-icon-moon').style.display = theme === 'dark' ? ''      : 'none';
+    if (storageOk) localStorage.setItem(LS_THEME, theme);
+    // Redraw chart for new colors
+    renderChart();
+  }
+
+  /* ─── VIEWS ────────────────────────────────────────────────── */
+  function showView(v) {
+    activeView = v;
+    ['dashboard','history','monthly','settings'].forEach(id => {
+      const el = document.getElementById('view-' + id);
+      if (el) el.hidden = (id !== v);
+    });
+    document.querySelectorAll('.view-tab').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.view === v);
+    });
+    if (v === 'monthly')  renderMonthly();
+    if (v === 'history')  renderHistory();
+    if (v === 'settings') renderSettings();
+  }
+
+  /* ─── VALIDATION ───────────────────────────────────────────── */
   function validateBalance(raw) {
-    const trimmed = (raw ?? '').trim();
-    if (trimmed === '') {
-      return { valid: false, error: 'Please enter a valid number' };
-    }
-
-    const parsed = parseFloat(trimmed);
-
-    if (isNaN(parsed) || !isFinite(parsed)) {
-      return { valid: false, error: 'Please enter a valid number' };
-    }
-
-    if (parsed <= 0 || parsed > MAX_BALANCE) {
-      return { valid: false, error: 'Balance must be greater than zero' };
-    }
-
-    return { valid: true, value: parsed };
+    const t = (raw ?? '').trim();
+    if (!t) return { ok: false, err: 'Enter a valid number' };
+    const v = parseFloat(t);
+    if (isNaN(v) || v <= 0 || v > MAX_BALANCE)
+      return { ok: false, err: 'Balance must be between 1 and 999,999,999' };
+    return { ok: true, val: v };
   }
 
-  /**
-   * Validate expense form inputs.
-   * @param {string} name
-   * @param {string} rawAmount
-   * @param {string} category
-   * @returns {{ valid: boolean, errors: { name?: string, amount?: string } }}
-   */
-  function validateExpense(name, rawAmount, category) {
-    const errors = {};
+  function validateExpense(name, rawAmt, cat) {
+    const errs = {};
+    const n = (name ?? '').trim();
+    if (!n)               errs.name   = 'Item name is required';
+    else if (n.length > MAX_NAME) errs.name = 'Max 250 characters';
 
-    // Validate name
-    const trimmedName = (name ?? '').trim();
-    if (trimmedName === '') {
-      errors.name = 'Item name is required';
-    } else if (trimmedName.length > MAX_NAME_LEN) {
-      errors.name = 'Item name must be 250 characters or fewer';
-    }
+    const a = parseFloat((rawAmt ?? '').trim());
+    if (!rawAmt.trim())           errs.amount = 'Enter a valid amount';
+    else if (isNaN(a) || a <= 0 || a > MAX_AMOUNT) errs.amount = 'Enter a valid amount';
 
-    // Validate amount
-    const trimmedAmount = (rawAmount ?? '').trim();
-    if (trimmedAmount === '') {
-      errors.amount = 'Enter a valid amount';
+    if (!cat) errs.cat = 'Select a category';
+    return { ok: Object.keys(errs).length === 0, errs };
+  }
+
+  /* ─── BALANCE ──────────────────────────────────────────────── */
+  function remaining() {
+    return state.expenses.reduce((s, e) => s - e.amount, state.balance);
+  }
+
+  function renderBalance() {
+    const rem  = remaining();
+    const disp = document.getElementById('balance-display');
+    const meta = document.getElementById('balance-meta');
+    disp.textContent = fmt(rem);
+    disp.classList.toggle('negative', rem < 0);
+    const spent = state.expenses.reduce((s, e) => s + e.amount, 0);
+    meta.textContent = state.balance > 0
+      ? `of ${fmt(state.balance)} · spent ${fmt(spent)}` : '';
+
+    // Limit bar
+    const wrap = document.getElementById('limit-bar-wrap');
+    if (state.limit > 0 && spent > 0) {
+      wrap.hidden = false;
+      const pct = Math.min(100, (spent / state.limit) * 100);
+      const fill = document.getElementById('limit-bar-fill');
+      fill.style.width = pct.toFixed(1) + '%';
+      fill.classList.toggle('over', pct >= 100);
+      document.getElementById('limit-pct-label').textContent = pct.toFixed(0) + '%';
     } else {
-      const parsed = parseFloat(trimmedAmount);
-      if (isNaN(parsed) || !isFinite(parsed) || parsed <= 0 || parsed > MAX_AMOUNT) {
-        errors.amount = 'Enter a valid amount';
-      }
-    }
-
-    return {
-      valid: Object.keys(errors).length === 0,
-      errors,
-    };
-  }
-
-  // ─── 6. DOM RENDERERS ──────────────────────────────────────────
-
-  /**
-   * Compute the remaining balance after all expenses.
-   * @returns {number}
-   */
-  function computeRemainingBalance() {
-    return state.expenses.reduce((sum, e) => sum - e.amount, state.balance);
-  }
-
-  /**
-   * Render the balance display value.
-   * Applies balance--negative class when remaining balance < 0.
-   */
-  function renderBalanceDisplay() {
-    const remaining = computeRemainingBalance();
-    const el = document.getElementById('balance-display');
-    el.textContent = formatCurrency(remaining);
-    if (remaining < 0) {
-      el.classList.add('balance--negative');
-    } else {
-      el.classList.remove('balance--negative');
+      wrap.hidden = true;
     }
   }
 
-  /**
-   * Render category tab buttons inside #category-tabs.
-   * Called once during init; 'Food' tab is active by default.
-   */
+  /* ─── CATEGORY TABS ────────────────────────────────────────── */
   function renderCategoryTabs() {
     const container = document.getElementById('category-tabs');
     container.innerHTML = '';
 
-    Object.keys(CATEGORIES).forEach(function (category) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'category-tab';
-      button.textContent = category;
-      button.setAttribute('data-category', category);
+    const cats = Object.keys(state.categories);
+    if (!cats.includes(selectedCategory)) {
+      selectedCategory = cats[0] || '';
+      document.getElementById('expense-category').value = selectedCategory;
+    }
 
-      if (category === 'Food') {
-        button.classList.add('category-tab--active');
-      }
+    cats.forEach(cat => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'cat-tab' + (cat === selectedCategory ? ' cat-tab--active' : '');
+      btn.textContent = cat;
+      btn.dataset.category = cat;
+      btn.addEventListener('click', () => selectCategory(cat));
+      container.appendChild(btn);
+    });
 
-      button.addEventListener('click', function () {
-        handleCategoryTab(category);
-      });
+    // "+ Custom" button
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'cat-tab cat-tab--add';
+    addBtn.textContent = '+ NEW';
+    addBtn.addEventListener('click', openCategoryModal);
+    container.appendChild(addBtn);
+  }
 
-      container.appendChild(button);
+  function selectCategory(cat) {
+    selectedCategory = cat;
+    document.getElementById('expense-category').value = cat;
+    document.querySelectorAll('.cat-tab').forEach(btn => {
+      btn.classList.toggle('cat-tab--active', btn.dataset.category === cat);
     });
   }
 
-  // Flag to ensure the delete event listener is only attached once
-  let listListenerAttached = false;
-
-  /**
-   * Build a single expense row <li> element.
-   * @param {Object} expense - Expense object from state
-   * @returns {HTMLLIElement}
-   */
-  function buildExpenseRow(expense) {
-    const li = document.createElement('li');
-    li.dataset.id = expense.id;
-
-    const nameEl = document.createElement('span');
-    nameEl.className = 'expense-name';
-    nameEl.textContent = truncate(expense.name, LIST_TRUNCATE);
-
-    const badge = document.createElement('span');
-    badge.className = 'category-badge';
-    badge.textContent = expense.category;
-    badge.style.backgroundColor = CATEGORIES[expense.category].color;
-
-    const amountEl = document.createElement('span');
-    amountEl.className = 'expense-amount';
-    amountEl.textContent = formatCurrency(expense.amount);
-
-    const delBtn = document.createElement('button');
-    delBtn.type = 'button';
-    delBtn.className = 'delete-btn';
-    delBtn.textContent = '✕';
-    delBtn.setAttribute('aria-label', 'Delete expense: ' + expense.name);
-    delBtn.dataset.id = expense.id;
-
-    li.append(nameEl, badge, amountEl, delBtn);
-    return li;
+  /* ─── CATEGORY MODAL ───────────────────────────────────────── */
+  function openCategoryModal() {
+    document.getElementById('modal-cat-name').value  = '';
+    document.getElementById('modal-cat-color').value = '#0066b1';
+    document.getElementById('modal-cat-error').textContent = '';
+    document.getElementById('modal-cat').hidden = false;
+    document.getElementById('modal-cat-name').focus();
   }
 
-  /**
-   * Re-render the full expense list from state.expenses.
-   * Shows placeholder when list is empty.
-   * Attaches delete event delegation once via listListenerAttached flag.
-   */
-  function renderExpenseList() {
-    const list = document.getElementById('expense-list');
-    list.innerHTML = '';
+  function closeCategoryModal() {
+    document.getElementById('modal-cat').hidden = true;
+  }
 
-    // Attach click delegation once
-    if (!listListenerAttached) {
-      list.addEventListener('click', function (e) {
-        if (e.target.classList.contains('delete-btn')) {
-          handleDeleteExpense(e);
-        }
-      });
-      listListenerAttached = true;
-    }
+  function saveCategoryFromModal() {
+    const name  = document.getElementById('modal-cat-name').value.trim();
+    const color = document.getElementById('modal-cat-color').value;
+    const errEl = document.getElementById('modal-cat-error');
 
-    if (state.expenses.length === 0) {
-      const empty = document.createElement('li');
-      empty.className = 'empty-state';
-      empty.textContent = 'NO EXPENSES RECORDED YET';
-      list.appendChild(empty);
+    if (!name) { errEl.textContent = 'Category name is required'; return; }
+    if (state.categories[name]) { errEl.textContent = 'Category already exists'; return; }
+
+    state.categories[name] = color;
+    persist();
+    closeCategoryModal();
+    renderCategoryTabs();
+    selectCategory(name);
+    if (activeView === 'settings') renderSettings();
+  }
+
+  /* ─── HISTORY RENDER ───────────────────────────────────────── */
+  function getSortedExpenses() {
+    const copy = [...state.expenses];
+    copy.sort((a, b) => {
+      let av, bv;
+      if (sortField === 'amount')   { av = a.amount;    bv = b.amount; }
+      else if (sortField === 'date') { av = a.timestamp; bv = b.timestamp; }
+      else { av = a.category; bv = b.category; }
+      if (typeof av === 'string') return sortDir === 'asc'
+        ? av.localeCompare(bv) : bv.localeCompare(av);
+      return sortDir === 'asc' ? av - bv : bv - av;
+    });
+    return copy;
+  }
+
+  function renderHistory() {
+    const tbody  = document.getElementById('expense-tbody');
+    const empty  = document.getElementById('history-empty');
+    const wrap   = tbody.closest('.expense-scroll-wrap');
+    tbody.innerHTML = '';
+
+    const sorted = getSortedExpenses();
+
+    if (sorted.length === 0) {
+      wrap.hidden  = true;
+      empty.hidden = false;
       return;
     }
+    wrap.hidden  = false;
+    empty.hidden = true;
 
-    state.expenses.forEach(function (expense) {
-      list.appendChild(buildExpenseRow(expense));
+    sorted.forEach(exp => {
+      const isOver = state.limit > 0 && exp.amount > state.limit;
+      const tr = document.createElement('tr');
+      if (isOver) tr.classList.add('over-limit');
+
+      const color = state.categories[exp.category] || '#7e7e7e';
+
+      tr.innerHTML = `
+        <td class="name-cell">
+          ${truncate(exp.name, 32)}
+          ${isOver ? '<span class="over-limit-badge">OVER LIMIT</span>' : ''}
+        </td>
+        <td><span class="cat-badge" style="background:${color}">${exp.category}</span></td>
+        <td class="date-cell">${fmtDate(exp.timestamp)}</td>
+        <td class="amount-cell ${isOver ? 'over-limit-amount' : ''}">${fmt(exp.amount)}</td>
+        <td class="del-cell">
+          <button class="btn btn--ghost btn--sm btn--danger delete-btn"
+                  aria-label="Delete ${exp.name}" data-id="${exp.id}">✕</button>
+        </td>`;
+      tbody.appendChild(tr);
     });
   }
 
-  /**
-   * Draw centered white text on the canvas.
-   * @param {CanvasRenderingContext2D} ctx
-   * @param {string} text
-   * @param {number} cx - Center x coordinate
-   * @param {number} cy - Center y coordinate
-   */
-  function drawCenteredText(ctx, text, cx, cy) {
-    ctx.save();
-    ctx.fillStyle    = '#ffffff';
-    ctx.font         = '700 14px "BMW Type Next Latin", Inter, system-ui, sans-serif';
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, cx, cy);
-    ctx.restore();
+  function renderAllExpenseViews() {
+    renderBalance();
+    renderChart();
+    if (activeView === 'history')  renderHistory();
+    if (activeView === 'monthly')  renderMonthly();
   }
 
-  /**
-   * Render the chart legend list from active categories.
-   * @param {{ category: string, amount: number }[]} activeCategories
-   */
-  function renderLegend(activeCategories) {
-    const legend = document.getElementById('chart-legend');
-    legend.innerHTML = '';
-
-    activeCategories.forEach(function ({ category, amount }) {
-      const li = document.createElement('li');
-
-      const swatch = document.createElement('span');
-      swatch.className = 'legend-swatch';
-      swatch.style.backgroundColor = CATEGORIES[category].color;
-
-      const label = document.createElement('span');
-      label.className = 'legend-label';
-      label.textContent = category;
-
-      const amountEl = document.createElement('span');
-      amountEl.className = 'legend-amount';
-      amountEl.textContent = formatCurrency(amount);
-
-      li.appendChild(swatch);
-      li.appendChild(label);
-      li.appendChild(amountEl);
-      legend.appendChild(li);
-    });
-  }
-
-  /**
-   * Re-render the doughnut chart and legend from state.expenses.
-   * Aggregates per-category totals, draws arc segments, updates aria-label.
-   * Shows "NO DATA" centered text when there are no expenses.
-   */
-  function renderChart() {
+  /* ─── CHART ────────────────────────────────────────────────── */
+  function initCanvas() {
     const canvas = document.getElementById('expense-chart');
-    const ctx = canvasCtx;
-    if (!ctx) return;
-
-    const size = 300;
-    const CX = size / 2;         // 150
-    const CY = size / 2;         // 150
-    const OUTER_R = Math.min(CX, CY) * 0.85;  // ~127.5
-    const INNER_R = OUTER_R * 0.55;            // ~70
-    const GAP = 0.02;
-
-    ctx.clearRect(0, 0, size, size);
-
-    // 1. Aggregate per-category totals
-    const totals = {};
-    Object.keys(CATEGORIES).forEach(function (cat) { totals[cat] = 0; });
-    state.expenses.forEach(function (e) { totals[e.category] += e.amount; });
-
-    const activeCategories = Object.keys(totals)
-      .filter(function (cat) { return totals[cat] > 0; })
-      .map(function (cat) { return { category: cat, amount: totals[cat] }; });
-
-    // 2. Empty state
-    if (activeCategories.length === 0) {
-      drawCenteredText(ctx, 'NO DATA', CX, CY);
-      renderLegend([]);
-      canvas.setAttribute('aria-label', 'Expense breakdown: no data');
-      return;
-    }
-
-    // 3. Grand total
-    const grandTotal = activeCategories.reduce(function (s, c) { return s + c.amount; }, 0);
-
-    // 4. Draw arc segments
-    let startAngle = -Math.PI / 2;
-    activeCategories.forEach(function ({ category, amount }) {
-      const sliceAngle = (amount / grandTotal) * 2 * Math.PI - GAP;
-      const endAngle = startAngle + sliceAngle;
-
-      ctx.beginPath();
-      ctx.arc(CX, CY, OUTER_R, startAngle + GAP / 2, endAngle);
-      ctx.arc(CX, CY, INNER_R, endAngle, startAngle + GAP / 2, true);
-      ctx.closePath();
-      ctx.fillStyle = CATEGORIES[category].color;
-      ctx.fill();
-
-      startAngle = endAngle + GAP;
-    });
-
-    // 5. Center text
-    drawCenteredText(ctx, formatCurrency(grandTotal), CX, CY);
-
-    // 6. Legend
-    renderLegend(activeCategories);
-
-    // 7. aria-label
-    const parts = activeCategories.map(function (c) {
-      return c.category + ' ' + formatCurrency(c.amount);
-    });
-    canvas.setAttribute('aria-label', 'Expense breakdown by category: ' + parts.join(', '));
-  }
-
-  /**
-   * Initialise the canvas element for high-DPI (Retina) displays.
-   * Scales the backing store by devicePixelRatio so drawing commands
-   * use logical pixels, then stores the context in canvasCtx.
-   * @param {HTMLCanvasElement} canvas
-   * @returns {CanvasRenderingContext2D}
-   */
-  function initCanvas(canvas) {
-    const dpr  = window.devicePixelRatio || 1;
-    const size = 300;
+    const dpr    = window.devicePixelRatio || 1;
+    const size   = 200;
     canvas.width        = size * dpr;
     canvas.height       = size * dpr;
     canvas.style.width  = size + 'px';
     canvas.style.height = size + 'px';
-    const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
-    canvasCtx = ctx;
-    return ctx;
+    canvasCtx = canvas.getContext('2d');
+    canvasCtx.scale(dpr, dpr);
   }
 
-  // ─── 7. EVENT HANDLERS ─────────────────────────────────────────
+  function renderChart() {
+    const ctx = canvasCtx;
+    if (!ctx) return;
+    const size = 200, cx = 100, cy = 100;
+    const OR = 82, IR = 48, GAP = 0.025;
+    ctx.clearRect(0, 0, size, size);
 
-  /**
-   * Show the LocalStorage unavailability warning banner.
-   * Guards against showing it more than once per session.
-   */
-  function showStorageBanner() {
-    if (bannerShown) return;
-    bannerShown = true;
-    const banner = document.getElementById('storage-banner');
-    if (!banner) return;
-    banner.removeAttribute('hidden');
-    const dismissBtn = document.getElementById('dismiss-banner');
-    if (dismissBtn) {
-      dismissBtn.addEventListener('click', function () {
-        banner.setAttribute('hidden', '');
-      }, { once: true });
+    const totals = {};
+    Object.keys(state.categories).forEach(c => { totals[c] = 0; });
+    state.expenses.forEach(e => { if (totals[e.category] !== undefined) totals[e.category] += e.amount; });
+
+    const active = Object.keys(totals)
+      .filter(c => totals[c] > 0)
+      .map(c => ({ c, v: totals[c] }));
+
+    const legend = document.getElementById('chart-legend');
+    legend.innerHTML = '';
+
+    if (!active.length) {
+      ctx.fillStyle = getComputedStyle(document.documentElement)
+                       .getPropertyValue('--muted').trim() || '#7e7e7e';
+      ctx.font = '700 13px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('NO DATA', cx, cy);
+      return;
     }
+
+    const total = active.reduce((s, x) => s + x.v, 0);
+    let start   = -Math.PI / 2;
+    active.forEach(({ c, v }) => {
+      const sweep = (v / total) * Math.PI * 2 - GAP;
+      ctx.beginPath();
+      ctx.arc(cx, cy, OR, start + GAP / 2, start + sweep);
+      ctx.arc(cx, cy, IR, start + sweep, start + GAP / 2, true);
+      ctx.closePath();
+      ctx.fillStyle = state.categories[c] || '#7e7e7e';
+      ctx.fill();
+      start += sweep + GAP;
+    });
+
+    // Center total
+    const textColor = getComputedStyle(document.documentElement)
+                       .getPropertyValue('--on-dark').trim() || '#fff';
+    ctx.fillStyle = textColor;
+    ctx.font = '700 12px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(fmt(total), cx, cy);
+
+    active.forEach(({ c, v }) => {
+      const li   = document.createElement('li');
+      const sw   = document.createElement('span');
+      sw.className = 'legend-swatch';
+      sw.style.background = state.categories[c] || '#7e7e7e';
+      const lbl  = document.createElement('span');
+      lbl.className = 'legend-label';
+      lbl.textContent = c;
+      const amt  = document.createElement('span');
+      amt.className = 'legend-amount';
+      amt.textContent = fmt(v);
+      li.append(sw, lbl, amt);
+      legend.appendChild(li);
+    });
   }
 
-  /**
-   * Display an inline field error message.
-   * @param {string} id  - The element ID of the error <span>
-   * @param {string} msg - The error message to display
-   */
-  function showFieldError(id, msg) {
-    document.getElementById(id).textContent = msg;
+  /* ─── MONTHLY SUMMARY ──────────────────────────────────────── */
+  function renderMonthly() {
+    const y = monthCursor.getFullYear();
+    const m = monthCursor.getMonth();
+
+    document.getElementById('month-title').textContent =
+      new Date(y, m, 1).toLocaleDateString(LOCALE, { month: 'long', year: 'numeric' })
+        .toUpperCase();
+
+    const exps = state.expenses.filter(e => {
+      const d = new Date(e.timestamp);
+      return d.getFullYear() === y && d.getMonth() === m;
+    });
+
+    const total = exps.reduce((s, e) => s + e.amount, 0);
+    const count = exps.length;
+    const avg   = count > 0 ? total / count : 0;
+
+    // Top category
+    const catTotals = {};
+    exps.forEach(e => { catTotals[e.category] = (catTotals[e.category] || 0) + e.amount; });
+    const topCat = Object.keys(catTotals).sort((a,b) => catTotals[b] - catTotals[a])[0] || '—';
+
+    document.getElementById('mstat-total').textContent = fmt(total);
+    document.getElementById('mstat-count').textContent = count;
+    document.getElementById('mstat-avg').textContent   = fmt(avg);
+    document.getElementById('mstat-top').textContent   = topCat;
+
+    const list  = document.getElementById('monthly-cat-list');
+    const empty = document.getElementById('monthly-empty');
+    list.innerHTML = '';
+
+    if (!exps.length) {
+      list.hidden  = true;
+      empty.hidden = false;
+      return;
+    }
+    list.hidden  = false;
+    empty.hidden = true;
+
+    const maxCat = Math.max(...Object.values(catTotals));
+    Object.keys(catTotals)
+      .sort((a,b) => catTotals[b] - catTotals[a])
+      .forEach(cat => {
+        const li   = document.createElement('li');
+        const pct  = maxCat > 0 ? (catTotals[cat] / maxCat * 100).toFixed(1) : 0;
+        const clr  = state.categories[cat] || '#7e7e7e';
+        li.innerHTML = `
+          <span class="monthly-cat-name">${cat}</span>
+          <div class="cat-bar-bg">
+            <div class="cat-bar-fill" style="width:${pct}%;background:${clr}"></div>
+          </div>
+          <span class="monthly-cat-amt">${fmt(catTotals[cat])}</span>`;
+        list.appendChild(li);
+      });
   }
 
-  /**
-   * Clear an inline field error message.
-   * @param {string} id - The element ID of the error <span>
-   */
-  function clearFieldError(id) {
-    document.getElementById(id).textContent = '';
+  /* ─── SETTINGS RENDER ──────────────────────────────────────── */
+  function renderSettings() {
+    const li = document.getElementById('limit-input');
+    if (state.limit > 0) li.value = state.limit;
+    const st = document.getElementById('limit-status');
+    st.textContent = state.limit > 0
+      ? `Active: transactions above ${fmt(state.limit)} are highlighted`
+      : 'No spend limit set';
+
+    const list = document.getElementById('custom-cats-list');
+    list.innerHTML = '';
+    Object.entries(state.categories).forEach(([name, color]) => {
+      const chip = document.createElement('div');
+      chip.className = 'custom-cat-chip';
+      chip.innerHTML = `
+        <span class="chip-swatch" style="background:${color}"></span>
+        ${name}
+        <button class="chip-del" aria-label="Remove ${name}" data-cat="${name}">✕</button>`;
+      list.appendChild(chip);
+    });
   }
 
-  /**
-   * Handle balance form submission.
-   * Validates input, updates state, persists, and re-renders on success.
-   * @param {SubmitEvent} e
-   */
+  /* ─── EVENT HANDLERS ───────────────────────────────────────── */
   function handleSetBalance(e) {
     e.preventDefault();
     const raw = document.getElementById('balance-input').value;
-    const result = validateBalance(raw);
-    if (!result.valid) {
-      showFieldError('balance-error', result.error);
+    const r   = validateBalance(raw);
+    if (!r.ok) {
+      document.getElementById('balance-error').textContent = r.err;
       return;
     }
-    state.balance = result.value;
-    persistState();
-    renderBalanceDisplay();
+    state.balance = r.val;
+    persist();
+    renderBalance();
     document.getElementById('balance-input').value = '';
-    clearFieldError('balance-error');
+    document.getElementById('balance-error').textContent = '';
   }
 
-  /**
-   * Handle expense form submission.
-   * Validates input, builds expense object, prepends to state, and re-renders.
-   * @param {SubmitEvent} e
-   */
   function handleAddExpense(e) {
     e.preventDefault();
+    const name    = document.getElementById('expense-name').value;
+    const rawAmt  = document.getElementById('expense-amount').value;
+    const cat     = document.getElementById('expense-category').value;
+    const { ok, errs } = validateExpense(name, rawAmt, cat);
 
-    const name      = document.getElementById('expense-name').value;
-    const rawAmount = document.getElementById('expense-amount').value;
-    const category  = document.getElementById('expense-category').value;
+    document.getElementById('name-error').textContent   = errs.name   || '';
+    document.getElementById('amount-error').textContent = errs.amount || '';
+    if (!ok) return;
 
-    const { valid, errors } = validateExpense(name, rawAmount, category);
-
-    if (!valid) {
-      showFieldError('name-error',   errors.name   || '');
-      showFieldError('amount-error', errors.amount || '');
-      return;
-    }
-
-    clearFieldError('name-error');
-    clearFieldError('amount-error');
-
-    const expense = {
-      id:        generateId(),
+    state.expenses.unshift({
+      id:        uid(),
       name:      name.trim(),
-      amount:    parseFloat(rawAmount),
-      category,
+      amount:    parseFloat(rawAmt),
+      category:  cat,
       timestamp: Date.now(),
-    };
-
-    state.expenses.unshift(expense);
-    persistState();
-    renderBalanceDisplay();
-    renderExpenseList();
-    renderChart();
-
-    // Reset form fields
+    });
+    persist();
+    renderAllExpenseViews();
     document.getElementById('expense-name').value   = '';
     document.getElementById('expense-amount').value = '';
-    handleCategoryTab('Food');
   }
 
-  /**
-   * Handle category tab button click.
-   * Updates the hidden input value and toggles the active tab class.
-   * @param {string} category
-   */
-  function handleCategoryTab(category) {
-    document.getElementById('expense-category').value = category;
-
-    document.querySelectorAll('.category-tab').forEach(function (btn) {
-      btn.classList.remove('category-tab--active');
-    });
-
-    const activeBtn = document.querySelector(`.category-tab[data-category="${category}"]`);
-    if (activeBtn) {
-      activeBtn.classList.add('category-tab--active');
-    }
-  }
-
-  /**
-   * Handle delete button click (event delegation on #expense-list).
-   * Uses closest() to find the delete button regardless of click target.
-   * @param {MouseEvent} e
-   */
   function handleDeleteExpense(e) {
     const btn = e.target.closest('.delete-btn');
     if (!btn) return;
-
-    const id = btn.getAttribute('data-id');
-    state.expenses = state.expenses.filter(exp => exp.id !== id);
-
-    persistState();
-    renderBalanceDisplay();
-    renderExpenseList();
-    renderChart();
+    state.expenses = state.expenses.filter(x => x.id !== btn.dataset.id);
+    persist();
+    renderAllExpenseViews();
   }
 
-  // ─── 8. INIT ───────────────────────────────────────────────────
-
-  /**
-   * Entry point. Called on DOMContentLoaded.
-   * Order: checkStorage → loadState → renderAll → attachListeners
-   */
-  function init() {
-    storageAvailable = checkStorageAvailable();
-    if (!storageAvailable) {
-      showStorageBanner();
+  function handleSortClick(e) {
+    const btn = e.target.closest('.sort-btn');
+    if (!btn) return;
+    const field = btn.dataset.sort;
+    if (sortField === field) {
+      sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortField = field;
+      sortDir   = field === 'category' ? 'asc' : 'desc';
     }
-    loadState();
-    renderBalanceDisplay();
+    document.querySelectorAll('.sort-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.sort === sortField);
+      if (b.dataset.sort === sortField) {
+        b.classList.toggle('desc', sortDir === 'desc');
+      } else {
+        b.classList.remove('desc');
+      }
+    });
+    renderHistory();
+  }
+
+  /* ─── INIT ─────────────────────────────────────────────────── */
+  function init() {
+    storageOk = checkStorage();
+    if (!storageOk) {
+      document.getElementById('storage-banner').hidden = false;
+    }
+
+    // Theme
+    const savedTheme = storageOk ? (localStorage.getItem(LS_THEME) || 'dark') : 'dark';
+    applyTheme(savedTheme);
+
+    load();
+    renderBalance();
     renderCategoryTabs();
-    renderExpenseList();
-    initCanvas(document.getElementById('expense-chart'));
+    initCanvas();
     renderChart();
-    document.getElementById('balance-form').addEventListener('submit', handleSetBalance);
-    document.getElementById('expense-form').addEventListener('submit', handleAddExpense);
+
+    // Month cursor = now
+    monthCursor = new Date();
+
+    /* ── Form events ── */
+    document.getElementById('balance-form')
+      .addEventListener('submit', handleSetBalance);
+    document.getElementById('expense-form')
+      .addEventListener('submit', handleAddExpense);
+
+    /* ── Delete delegation (history table) ── */
+    document.getElementById('expense-tbody')
+      .addEventListener('click', handleDeleteExpense);
+
+    /* ── View tabs ── */
+    document.querySelectorAll('.view-tab').forEach(btn => {
+      btn.addEventListener('click', () => showView(btn.dataset.view));
+    });
+
+    /* ── Sort bar ── */
+    document.querySelector('.sort-bar')
+      .addEventListener('click', handleSortClick);
+
+    /* ── Monthly nav ── */
+    document.getElementById('month-prev').addEventListener('click', () => {
+      monthCursor.setMonth(monthCursor.getMonth() - 1);
+      renderMonthly();
+    });
+    document.getElementById('month-next').addEventListener('click', () => {
+      monthCursor.setMonth(monthCursor.getMonth() + 1);
+      renderMonthly();
+    });
+
+    /* ── Theme toggle ── */
+    document.getElementById('theme-toggle').addEventListener('click', () => {
+      const cur = document.documentElement.getAttribute('data-theme');
+      applyTheme(cur === 'dark' ? 'light' : 'dark');
+    });
+
+    /* ── Category modal ── */
+    document.getElementById('modal-cat-cancel').addEventListener('click', closeCategoryModal);
+    document.getElementById('modal-cat-save').addEventListener('click', saveCategoryFromModal);
+    document.getElementById('modal-cat').addEventListener('click', e => {
+      if (e.target === e.currentTarget) closeCategoryModal();
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeCategoryModal();
+    });
+
+    /* ── Settings: limit ── */
+    document.getElementById('save-limit-btn').addEventListener('click', () => {
+      const v = parseFloat(document.getElementById('limit-input').value);
+      if (isNaN(v) || v < 0) return;
+      state.limit = v;
+      persist();
+      renderSettings();
+      renderBalance();
+      if (activeView === 'history') renderHistory();
+    });
+    document.getElementById('clear-limit-btn').addEventListener('click', () => {
+      state.limit = 0;
+      document.getElementById('limit-input').value = '';
+      persist();
+      renderSettings();
+      renderBalance();
+      if (activeView === 'history') renderHistory();
+    });
+
+    /* ── Settings: category management ── */
+    document.getElementById('add-cat-btn').addEventListener('click', () => {
+      const name  = document.getElementById('new-cat-name').value.trim();
+      const color = document.getElementById('new-cat-color').value;
+      const errEl = document.getElementById('cat-error');
+      if (!name) { errEl.textContent = 'Name required'; return; }
+      if (state.categories[name]) { errEl.textContent = 'Already exists'; return; }
+      state.categories[name] = color;
+      persist();
+      renderSettings();
+      renderCategoryTabs();
+      document.getElementById('new-cat-name').value = '';
+      errEl.textContent = '';
+    });
+
+    document.getElementById('custom-cats-list').addEventListener('click', e => {
+      const btn = e.target.closest('.chip-del');
+      if (!btn) return;
+      const cat = btn.dataset.cat;
+      delete state.categories[cat];
+      // Remap expenses with deleted category to 'Other' (or first available)
+      const fallback = Object.keys(state.categories)[0] || 'Other';
+      state.expenses.forEach(exp => {
+        if (exp.category === cat) exp.category = fallback;
+      });
+      persist();
+      renderSettings();
+      renderCategoryTabs();
+      renderAllExpenseViews();
+    });
+
+    /* ── Storage banner dismiss ── */
+    document.getElementById('dismiss-banner').addEventListener('click', () => {
+      document.getElementById('storage-banner').hidden = true;
+    });
   }
 
   document.addEventListener('DOMContentLoaded', init);
-
 })();
